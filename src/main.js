@@ -177,11 +177,10 @@ if (!window.React || !window.ReactDOM) {
     return h('section', { className: 'page-card' },
       h('div', { className: 'page-header' },
         h('div', null,
-          h('p', { className: 'eyebrow' }, 'トップページ'),
-          h('h2', null, `未完了タスク ${incomplete.length} 件`),
+          h('h2', null, '未完了タスク'),
         ),
       ),
-      h(TaskSection, { title: '未完了タスク', tasks: incomplete, openPanel, toggleTask, deleteTask }),
+      h(TaskSection, { tasks: incomplete, openPanel, toggleTask, deleteTask }),
       h('div', { className: 'bottom-action' },
         h('button', { className: 'primary add-task-button', type: 'button', onClick: () => openPanel() }, 'タスク追加'),
       ),
@@ -194,26 +193,23 @@ if (!window.React || !window.ReactDOM) {
     return h('section', { className: 'page-card' },
       h('div', { className: 'page-header' },
         h('div', null,
-          h('p', { className: 'eyebrow' }, '完了タスク'),
-          h('h2', null, `完了タスク ${completed.length} 件`),
+          h('h2', null, '完了タスク'),
         ),
+      ),
+      h(TaskSection, { tasks: completed, openPanel, toggleTask, deleteTask }),
+      h('div', { className: 'bottom-action' },
         h('button', {
-          className: 'danger clear-completed-button',
+          className: 'danger add-task-button clear-completed-button',
           type: 'button',
           disabled: completed.length === 0,
           onClick: clearCompletedTasks,
         }, '完了データ全削除'),
       ),
-      h(TaskSection, { title: '完了タスク', tasks: completed, openPanel, toggleTask, deleteTask }),
     );
   }
 
-  function TaskSection({ title, tasks, openPanel, toggleTask, deleteTask }) {
+  function TaskSection({ tasks, openPanel, toggleTask, deleteTask }) {
     return h('section', { className: 'task-section' },
-      h('div', { className: 'section-title' },
-        h('h3', null, title),
-        h('span', null, `${tasks.length} 件`),
-      ),
       tasks.length === 0
         ? h('p', { className: 'empty' }, '表示するタスクはありません。')
         : h('ul', { className: 'task-list' }, tasks.map((task) => h(TaskItem, {
