@@ -119,11 +119,16 @@ if (!window.React || !window.ReactDOM) {
       setTasks([]);
     }
 
+    function clearCompletedTasks() {
+      if (!confirm('完了タスクをすべて削除しますか？')) return;
+      setTasks((currentTasks) => currentTasks.filter((task) => !task.completed));
+    }
+
     return h('div', { className: 'shell' },
       h(AppHeader),
       h('main', { className: 'main' },
         activeView === 'tasks' && h(TaskView, { tasks, openPanel, toggleTask, deleteTask }),
-        activeView === 'completed' && h(CompletedTaskView, { tasks, openPanel, toggleTask, deleteTask }),
+        activeView === 'completed' && h(CompletedTaskView, { tasks, openPanel, toggleTask, deleteTask, clearCompletedTasks }),
         activeView === 'settings' && h(SettingsView, { tasks, theme, setTheme, exportTasks, importTasks, clearAllTasks }),
       ),
       h(BottomMenu, { activeView, setActiveView, closePanel }),
@@ -133,9 +138,11 @@ if (!window.React || !window.ReactDOM) {
 
   function AppHeader() {
     return h('header', { className: 'app-header' },
-      h('p', { className: 'eyebrow' }, 'taskick'),
-      h('h1', null, 'タスク管理'),
-      h('p', { className: 'muted' }, 'localStorage に保存するシンプルな買い物・やる事リストです。'),
+      h('div', { className: 'title-mark', 'aria-hidden': 'true' }, 'T'),
+      h('div', { className: 'title-copy' },
+        h('p', { className: 'eyebrow' }, 'taskick'),
+        h('h1', null, 'タスク管理'),
+      ),
     );
   }
 
@@ -174,11 +181,6 @@ if (!window.React || !window.ReactDOM) {
           h('h2', null, `未完了タスク ${incomplete.length} 件`),
         ),
       ),
-      h('div', { className: 'deadline-grid', 'aria-label': '期限別の状況' },
-        h(DeadlineCard, { label: '今日', count: 0, note: '期限項目は未確認のため、現在は自動分類しません。' }),
-        h(DeadlineCard, { label: '期限切れ', count: 0, note: '期限項目は未確認のため、現在は自動分類しません。' }),
-        h(DeadlineCard, { label: '期限なし', count: incomplete.length, note: '現在のデータ構造には期限がないため未完了タスクをここに扱います。' }),
-      ),
       h(TaskSection, { title: '未完了タスク', tasks: incomplete, openPanel, toggleTask, deleteTask }),
       h('div', { className: 'bottom-action' },
         h('button', { className: 'primary add-task-button', type: 'button', onClick: () => openPanel() }, 'タスク追加'),
@@ -186,7 +188,7 @@ if (!window.React || !window.ReactDOM) {
     );
   }
 
-  function CompletedTaskView({ tasks, openPanel, toggleTask, deleteTask }) {
+  function CompletedTaskView({ tasks, openPanel, toggleTask, deleteTask, clearCompletedTasks }) {
     const completed = sortTasksByCreatedAtDesc(tasks.filter((task) => task.completed));
 
     return h('section', { className: 'page-card' },
@@ -195,16 +197,14 @@ if (!window.React || !window.ReactDOM) {
           h('p', { className: 'eyebrow' }, '完了タスク'),
           h('h2', null, `完了タスク ${completed.length} 件`),
         ),
+        h('button', {
+          className: 'danger clear-completed-button',
+          type: 'button',
+          disabled: completed.length === 0,
+          onClick: clearCompletedTasks,
+        }, '完了データ全削除'),
       ),
       h(TaskSection, { title: '完了タスク', tasks: completed, openPanel, toggleTask, deleteTask }),
-    );
-  }
-
-  function DeadlineCard({ label, count, note }) {
-    return h('div', { className: 'deadline-card' },
-      h('span', null, label),
-      h('strong', null, count),
-      h('small', null, note),
     );
   }
 

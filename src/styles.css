@@ -527,3 +527,57 @@ h3 {
   text-align: center;
   text-decoration: none;
 }
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: auto;
+  padding: 18px 20px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--card) 92%, transparent), color-mix(in srgb, var(--card-soft) 72%, transparent));
+}
+
+.title-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+
+.title-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.title-copy .eyebrow {
+  margin: 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+}
+
+.title-copy h1 {
+  margin: 0;
+  font-size: clamp(1.35rem, 3vw, 1.9rem);
+  letter-spacing: -0.04em;
+}
+
+.clear-completed-button {
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .app-header {
+    padding: 14px 16px;
+  }
+
+  .title-mark {
+    width: 40px;
+    height: 40px;
+  }
+}
