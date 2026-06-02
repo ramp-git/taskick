@@ -1,7 +1,6 @@
 # taskick
 
 localStorage に保存するシンプルなタスク管理 Web アプリです。
-表示部分は React で描画します。React / ReactDOM は CDN から読み込みます。
 
 ## 機能
 
@@ -41,8 +40,9 @@ type Task = {
 
 ## 起動方法
 
+ブラウザで直接 `index.html` を開く場合も動作します。
+このアプリは import/export を使わない通常の JavaScript として読み込むため、`file://` で開いた場合でも ES Modules の CORS 制約を受けません。
 HTTP サーバーで確認する場合は以下を実行してください。
-React / ReactDOM は CDN から読み込むため、CDN にアクセスできない環境での動作は未確認です。
 
 ```bash
 npm install
