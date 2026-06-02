@@ -89,18 +89,6 @@ if (!window.React || !window.ReactDOM) {
       setTasks((currentTasks) => currentTasks.filter((item) => item.id !== id));
     }
 
-    function moveTask(id, direction) {
-      setTasks((currentTasks) => {
-        const index = currentTasks.findIndex((item) => item.id === id);
-        const nextIndex = index + direction;
-        if (index < 0 || nextIndex < 0 || nextIndex >= currentTasks.length) return currentTasks;
-        const nextTasks = [...currentTasks];
-        const [task] = nextTasks.splice(index, 1);
-        nextTasks.splice(nextIndex, 0, task);
-        return nextTasks;
-      });
-    }
-
     function exportTasks() {
       const payload = JSON.stringify(tasks, null, 2);
       const blob = new Blob([payload], { type: 'application/json' });
@@ -132,62 +120,83 @@ if (!window.React || !window.ReactDOM) {
     }
 
     return h('div', { className: 'shell' },
-      h(Sidebar, { activeView, setActiveView, closePanel }),
+      h(AppHeader),
       h('main', { className: 'main' },
-        activeView === 'tasks'
-          ? h(TaskView, { tasks, openPanel, toggleTask, deleteTask, moveTask })
-          : h(SettingsView, { tasks, theme, setTheme, exportTasks, importTasks, clearAllTasks }),
+        activeView === 'tasks' && h(TaskView, { tasks, openPanel, toggleTask, deleteTask }),
+        activeView === 'completed' && h(CompletedTaskView, { tasks, openPanel, toggleTask, deleteTask }),
+        activeView === 'settings' && h(SettingsView, { tasks, theme, setTheme, exportTasks, importTasks, clearAllTasks }),
       ),
+      h(BottomMenu, { activeView, setActiveView, closePanel }),
       panelOpen && h(TaskPanel, { task: editingTask, closePanel, saveTask }),
     );
   }
 
-  function Sidebar({ activeView, setActiveView, closePanel }) {
+  function AppHeader() {
+    return h('header', { className: 'app-header' },
+      h('p', { className: 'eyebrow' }, 'taskick'),
+      h('h1', null, 'タスク管理'),
+      h('p', { className: 'muted' }, 'localStorage に保存するシンプルな買い物・やる事リストです。'),
+    );
+  }
+
+  function BottomMenu({ activeView, setActiveView, closePanel }) {
     function selectView(view) {
       setActiveView(view);
       closePanel();
     }
 
-    return h('aside', { className: 'sidebar', 'aria-label': 'メニュー' },
-      h('div', null,
-        h('p', { className: 'eyebrow' }, 'taskick'),
-        h('h1', null, 'タスク管理'),
-        h('p', { className: 'muted' }, 'localStorage に保存するシンプルな買い物・やる事リストです。'),
-      ),
-      h('nav', { className: 'nav' },
-        h('button', {
-          className: `nav-button ${activeView === 'tasks' ? 'active' : ''}`,
-          type: 'button',
-          onClick: () => selectView('tasks'),
-        }, 'タスク一覧'),
-        h('button', {
-          className: `nav-button ${activeView === 'settings' ? 'active' : ''}`,
-          type: 'button',
-          onClick: () => selectView('settings'),
-        }, '設定'),
-      ),
+    return h('nav', { className: 'bottom-menu', 'aria-label': 'ページ下メニュー' },
+      h('a', {
+        className: `bottom-menu-button ${activeView === 'tasks' ? 'active' : ''}`,
+        href: '#tasks',
+        onClick: (event) => { event.preventDefault(); selectView('tasks'); },
+      }, '未完了タスク'),
+      h('a', {
+        className: `bottom-menu-button ${activeView === 'completed' ? 'active' : ''}`,
+        href: '#completed',
+        onClick: (event) => { event.preventDefault(); selectView('completed'); },
+      }, '完了タスク'),
+      h('a', {
+        className: `bottom-menu-button ${activeView === 'settings' ? 'active' : ''}`,
+        href: '#settings',
+        onClick: (event) => { event.preventDefault(); selectView('settings'); },
+      }, '設定'),
     );
   }
 
-  function TaskView({ tasks, openPanel, toggleTask, deleteTask, moveTask }) {
-    const incomplete = tasks.filter((task) => !task.completed);
-    const completed = tasks.filter((task) => task.completed);
+  function TaskView({ tasks, openPanel, toggleTask, deleteTask }) {
+    const incomplete = sortTasksByCreatedAtDesc(tasks.filter((task) => !task.completed));
 
     return h('section', { className: 'page-card' },
       h('div', { className: 'page-header' },
         h('div', null,
-          h('p', { className: 'eyebrow' }, 'タスク一覧'),
-          h('h2', null, `未完了 ${incomplete.length} 件 / 完了 ${completed.length} 件`),
+          h('p', { className: 'eyebrow' }, 'トップページ'),
+          h('h2', null, `未完了タスク ${incomplete.length} 件`),
         ),
-        h('button', { className: 'primary', type: 'button', onClick: () => openPanel() }, 'タスク追加'),
       ),
       h('div', { className: 'deadline-grid', 'aria-label': '期限別の状況' },
         h(DeadlineCard, { label: '今日', count: 0, note: '期限項目は未確認のため、現在は自動分類しません。' }),
         h(DeadlineCard, { label: '期限切れ', count: 0, note: '期限項目は未確認のため、現在は自動分類しません。' }),
-        h(DeadlineCard, { label: '期限なし', count: tasks.length, note: '現在のデータ構造には期限がないため全タスクをここに扱います。' }),
+        h(DeadlineCard, { label: '期限なし', count: incomplete.length, note: '現在のデータ構造には期限がないため未完了タスクをここに扱います。' }),
       ),
-      h(TaskSection, { title: '未完了タスク', tasks: incomplete, allTasks: tasks, openPanel, toggleTask, deleteTask, moveTask }),
-      h(TaskSection, { title: '完了タスク', tasks: completed, allTasks: tasks, openPanel, toggleTask, deleteTask, moveTask }),
+      h(TaskSection, { title: '未完了タスク', tasks: incomplete, openPanel, toggleTask, deleteTask }),
+      h('div', { className: 'bottom-action' },
+        h('button', { className: 'primary add-task-button', type: 'button', onClick: () => openPanel() }, 'タスク追加'),
+      ),
+    );
+  }
+
+  function CompletedTaskView({ tasks, openPanel, toggleTask, deleteTask }) {
+    const completed = sortTasksByCreatedAtDesc(tasks.filter((task) => task.completed));
+
+    return h('section', { className: 'page-card' },
+      h('div', { className: 'page-header' },
+        h('div', null,
+          h('p', { className: 'eyebrow' }, '完了タスク'),
+          h('h2', null, `完了タスク ${completed.length} 件`),
+        ),
+      ),
+      h(TaskSection, { title: '完了タスク', tasks: completed, openPanel, toggleTask, deleteTask }),
     );
   }
 
@@ -199,7 +208,7 @@ if (!window.React || !window.ReactDOM) {
     );
   }
 
-  function TaskSection({ title, tasks, allTasks, openPanel, toggleTask, deleteTask, moveTask }) {
+  function TaskSection({ title, tasks, openPanel, toggleTask, deleteTask }) {
     return h('section', { className: 'task-section' },
       h('div', { className: 'section-title' },
         h('h3', null, title),
@@ -210,18 +219,14 @@ if (!window.React || !window.ReactDOM) {
         : h('ul', { className: 'task-list' }, tasks.map((task) => h(TaskItem, {
             key: task.id,
             task,
-            allTasks,
             openPanel,
             toggleTask,
             deleteTask,
-            moveTask,
           }))),
     );
   }
 
-  function TaskItem({ task, allTasks, openPanel, toggleTask, deleteTask, moveTask }) {
-    const originalIndex = allTasks.findIndex((item) => item.id === task.id);
-
+  function TaskItem({ task, openPanel, toggleTask, deleteTask }) {
     return h('li', { className: 'task-item' },
       h('label', { className: 'check-label' },
         h('input', {
@@ -234,18 +239,6 @@ if (!window.React || !window.ReactDOM) {
       h('span', { className: 'type-badge' }, typeLabels[task.type] ?? task.type),
       h('span', { className: `task-title ${task.completed ? 'done' : ''}` }, task.title),
       h('div', { className: 'task-actions' },
-        h('button', {
-          className: 'ghost',
-          type: 'button',
-          disabled: originalIndex === 0,
-          onClick: () => moveTask(task.id, -1),
-        }, '上へ'),
-        h('button', {
-          className: 'ghost',
-          type: 'button',
-          disabled: originalIndex === allTasks.length - 1,
-          onClick: () => moveTask(task.id, 1),
-        }, '下へ'),
         h('button', { className: 'ghost', type: 'button', onClick: () => openPanel(task.id) }, '編集'),
         h('button', { className: 'danger', type: 'button', onClick: () => deleteTask(task.id) }, '削除'),
       ),
@@ -396,6 +389,10 @@ function loadTheme() {
   const saved = localStorage.getItem(THEME_KEY);
   if (saved === 'light' || saved === 'dark') return saved;
   return 'light';
+}
+
+function sortTasksByCreatedAtDesc(tasks) {
+  return [...tasks].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
 function getStorageBytes(tasks, theme) {
