@@ -581,3 +581,67 @@ h3 {
     height: 40px;
   }
 }
+
+.task-item {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.task-row {
+  min-width: 0;
+}
+
+.task-meta-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.task-title-row {
+  padding-left: 2px;
+}
+
+.task-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.icon-action {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 12px;
+  padding: 0;
+  background: var(--card-soft);
+  color: var(--text);
+  font-size: 1.1rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.edit-action {
+  color: var(--primary-strong);
+}
+
+.delete-action {
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 1.35rem;
+}
+
+@media (max-width: 720px) {
+  .task-item {
+    grid-template-columns: 1fr;
+  }
+
+  .task-actions {
+    grid-column: auto;
+    justify-content: flex-end;
+  }
+}

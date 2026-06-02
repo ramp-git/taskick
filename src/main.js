@@ -228,19 +228,35 @@ if (!window.React || !window.ReactDOM) {
 
   function TaskItem({ task, openPanel, toggleTask, deleteTask }) {
     return h('li', { className: 'task-item' },
-      h('label', { className: 'check-label' },
-        h('input', {
-          type: 'checkbox',
-          checked: task.completed,
-          onChange: () => toggleTask(task.id),
-        }),
-        h('span', { className: 'sr-only' }, '完了 / 未完了切替'),
+      h('div', { className: 'task-row task-meta-row' },
+        h('label', { className: 'check-label' },
+          h('input', {
+            type: 'checkbox',
+            checked: task.completed,
+            onChange: () => toggleTask(task.id),
+          }),
+          h('span', { className: 'sr-only' }, '完了 / 未完了切替'),
+        ),
+        h('span', { className: 'type-badge' }, typeLabels[task.type] ?? task.type),
+        h('div', { className: 'task-actions' },
+          h('button', {
+            className: 'icon-action edit-action',
+            type: 'button',
+            onClick: () => openPanel(task.id),
+            'aria-label': `${task.title}を編集`,
+            title: '編集',
+          }, '✎'),
+          h('button', {
+            className: 'icon-action delete-action',
+            type: 'button',
+            onClick: () => deleteTask(task.id),
+            'aria-label': `${task.title}を削除`,
+            title: '削除',
+          }, '×'),
+        ),
       ),
-      h('span', { className: 'type-badge' }, typeLabels[task.type] ?? task.type),
-      h('span', { className: `task-title ${task.completed ? 'done' : ''}` }, task.title),
-      h('div', { className: 'task-actions' },
-        h('button', { className: 'ghost', type: 'button', onClick: () => openPanel(task.id) }, '編集'),
-        h('button', { className: 'danger', type: 'button', onClick: () => deleteTask(task.id) }, '削除'),
+      h('div', { className: 'task-row task-title-row' },
+        h('span', { className: `task-title ${task.completed ? 'done' : ''}` }, task.title),
       ),
     );
   }
