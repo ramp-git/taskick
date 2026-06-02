@@ -427,3 +427,14 @@ h3 {
     justify-content: flex-start;
   }
 }
+
+.loading-card,
+.runtime-error {
+  width: min(720px, calc(100% - 32px));
+  margin: 48px auto;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}

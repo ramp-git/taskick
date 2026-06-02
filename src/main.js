@@ -3,22 +3,372 @@ const THEME_KEY = 'taskick.theme.v1';
 
 /** @typedef {{id:string,type:string,title:string,completed:boolean,createdAt:string,updatedAt:string}} Task */
 
-const state = {
-  tasks: loadTasks(),
-  theme: loadTheme(),
-  activeView: 'tasks',
-  panelOpen: false,
-  editingId: null,
-};
-
 const typeLabels = {
   shopping: '買い物',
   todo: 'やる事',
 };
 
 const app = document.querySelector('#app');
-applyTheme(state.theme);
-render();
+
+if (!window.React || !window.ReactDOM) {
+  app.innerHTML = `
+    <section class="runtime-error">
+      <p class="eyebrow">未確認</p>
+      <h1>React を読み込めませんでした</h1>
+      <p>この画面は React で描画します。ネットワーク制限などで CDN の React が読み込めない場合は表示できません。</p>
+      <p>HTTP サーバーで開いているか、React CDN にアクセスできるかを確認してください。</p>
+    </section>
+  `;
+} else {
+  const { createElement: h, useEffect, useMemo, useState } = window.React;
+  const root = window.ReactDOM.createRoot(app);
+  root.render(h(App));
+
+  function App() {
+    const [tasks, setTasks] = useState(loadTasks);
+    const [theme, setTheme] = useState(loadTheme);
+    const [activeView, setActiveView] = useState('tasks');
+    const [panelOpen, setPanelOpen] = useState(false);
+    const [editingId, setEditingId] = useState(null);
+
+    useEffect(() => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    }, [tasks]);
+
+    useEffect(() => {
+      document.documentElement.dataset.theme = theme;
+      localStorage.setItem(THEME_KEY, theme);
+    }, [theme]);
+
+    const editingTask = useMemo(
+      () => tasks.find((task) => task.id === editingId) ?? null,
+      [editingId, tasks],
+    );
+
+    function openPanel(id = null) {
+      setEditingId(id);
+      setPanelOpen(true);
+    }
+
+    function closePanel() {
+      setPanelOpen(false);
+      setEditingId(null);
+    }
+
+    function saveTask(formTask) {
+      const now = new Date().toISOString();
+      setTasks((currentTasks) => {
+        if (formTask.id) {
+          return currentTasks.map((task) => task.id === formTask.id
+            ? { ...task, ...formTask, updatedAt: now }
+            : task);
+        }
+
+        return [{
+          id: crypto.randomUUID(),
+          type: formTask.type,
+          title: formTask.title,
+          completed: formTask.completed,
+          createdAt: now,
+          updatedAt: now,
+        }, ...currentTasks];
+      });
+      closePanel();
+    }
+
+    function toggleTask(id) {
+      setTasks((currentTasks) => currentTasks.map((task) => task.id === id
+        ? { ...task, completed: !task.completed, updatedAt: new Date().toISOString() }
+        : task));
+    }
+
+    function deleteTask(id) {
+      const task = tasks.find((item) => item.id === id);
+      if (!task) return;
+      if (!confirm(`「${task.title}」を削除しますか？`)) return;
+      setTasks((currentTasks) => currentTasks.filter((item) => item.id !== id));
+    }
+
+    function moveTask(id, direction) {
+      setTasks((currentTasks) => {
+        const index = currentTasks.findIndex((item) => item.id === id);
+        const nextIndex = index + direction;
+        if (index < 0 || nextIndex < 0 || nextIndex >= currentTasks.length) return currentTasks;
+        const nextTasks = [...currentTasks];
+        const [task] = nextTasks.splice(index, 1);
+        nextTasks.splice(nextIndex, 0, task);
+        return nextTasks;
+      });
+    }
+
+    function exportTasks() {
+      const payload = JSON.stringify(tasks, null, 2);
+      const blob = new Blob([payload], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `taskick-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function importTasks(file) {
+      if (!file) return;
+      try {
+        const imported = JSON.parse(await file.text());
+        if (!Array.isArray(imported) || !imported.every(isTaskLike)) {
+          alert('インポートできるJSON形式ではありません。');
+          return;
+        }
+        setTasks(imported);
+      } catch {
+        alert('JSONの読み込みに失敗しました。');
+      }
+    }
+
+    function clearAllTasks() {
+      if (!confirm('全データを削除しますか？')) return;
+      setTasks([]);
+    }
+
+    return h('div', { className: 'shell' },
+      h(Sidebar, { activeView, setActiveView, closePanel }),
+      h('main', { className: 'main' },
+        activeView === 'tasks'
+          ? h(TaskView, { tasks, openPanel, toggleTask, deleteTask, moveTask })
+          : h(SettingsView, { tasks, theme, setTheme, exportTasks, importTasks, clearAllTasks }),
+      ),
+      panelOpen && h(TaskPanel, { task: editingTask, closePanel, saveTask }),
+    );
+  }
+
+  function Sidebar({ activeView, setActiveView, closePanel }) {
+    function selectView(view) {
+      setActiveView(view);
+      closePanel();
+    }
+
+    return h('aside', { className: 'sidebar', 'aria-label': 'メニュー' },
+      h('div', null,
+        h('p', { className: 'eyebrow' }, 'taskick'),
+        h('h1', null, 'タスク管理'),
+        h('p', { className: 'muted' }, 'localStorage に保存するシンプルな買い物・やる事リストです。'),
+      ),
+      h('nav', { className: 'nav' },
+        h('button', {
+          className: `nav-button ${activeView === 'tasks' ? 'active' : ''}`,
+          type: 'button',
+          onClick: () => selectView('tasks'),
+        }, 'タスク一覧'),
+        h('button', {
+          className: `nav-button ${activeView === 'settings' ? 'active' : ''}`,
+          type: 'button',
+          onClick: () => selectView('settings'),
+        }, '設定'),
+      ),
+    );
+  }
+
+  function TaskView({ tasks, openPanel, toggleTask, deleteTask, moveTask }) {
+    const incomplete = tasks.filter((task) => !task.completed);
+    const completed = tasks.filter((task) => task.completed);
+
+    return h('section', { className: 'page-card' },
+      h('div', { className: 'page-header' },
+        h('div', null,
+          h('p', { className: 'eyebrow' }, 'タスク一覧'),
+          h('h2', null, `未完了 ${incomplete.length} 件 / 完了 ${completed.length} 件`),
+        ),
+        h('button', { className: 'primary', type: 'button', onClick: () => openPanel() }, 'タスク追加'),
+      ),
+      h('div', { className: 'deadline-grid', 'aria-label': '期限別の状況' },
+        h(DeadlineCard, { label: '今日', count: 0, note: '期限項目は未確認のため、現在は自動分類しません。' }),
+        h(DeadlineCard, { label: '期限切れ', count: 0, note: '期限項目は未確認のため、現在は自動分類しません。' }),
+        h(DeadlineCard, { label: '期限なし', count: tasks.length, note: '現在のデータ構造には期限がないため全タスクをここに扱います。' }),
+      ),
+      h(TaskSection, { title: '未完了タスク', tasks: incomplete, allTasks: tasks, openPanel, toggleTask, deleteTask, moveTask }),
+      h(TaskSection, { title: '完了タスク', tasks: completed, allTasks: tasks, openPanel, toggleTask, deleteTask, moveTask }),
+    );
+  }
+
+  function DeadlineCard({ label, count, note }) {
+    return h('div', { className: 'deadline-card' },
+      h('span', null, label),
+      h('strong', null, count),
+      h('small', null, note),
+    );
+  }
+
+  function TaskSection({ title, tasks, allTasks, openPanel, toggleTask, deleteTask, moveTask }) {
+    return h('section', { className: 'task-section' },
+      h('div', { className: 'section-title' },
+        h('h3', null, title),
+        h('span', null, `${tasks.length} 件`),
+      ),
+      tasks.length === 0
+        ? h('p', { className: 'empty' }, '表示するタスクはありません。')
+        : h('ul', { className: 'task-list' }, tasks.map((task) => h(TaskItem, {
+            key: task.id,
+            task,
+            allTasks,
+            openPanel,
+            toggleTask,
+            deleteTask,
+            moveTask,
+          }))),
+    );
+  }
+
+  function TaskItem({ task, allTasks, openPanel, toggleTask, deleteTask, moveTask }) {
+    const originalIndex = allTasks.findIndex((item) => item.id === task.id);
+
+    return h('li', { className: 'task-item' },
+      h('label', { className: 'check-label' },
+        h('input', {
+          type: 'checkbox',
+          checked: task.completed,
+          onChange: () => toggleTask(task.id),
+        }),
+        h('span', { className: 'sr-only' }, '完了 / 未完了切替'),
+      ),
+      h('span', { className: 'type-badge' }, typeLabels[task.type] ?? task.type),
+      h('span', { className: `task-title ${task.completed ? 'done' : ''}` }, task.title),
+      h('div', { className: 'task-actions' },
+        h('button', {
+          className: 'ghost',
+          type: 'button',
+          disabled: originalIndex === 0,
+          onClick: () => moveTask(task.id, -1),
+        }, '上へ'),
+        h('button', {
+          className: 'ghost',
+          type: 'button',
+          disabled: originalIndex === allTasks.length - 1,
+          onClick: () => moveTask(task.id, 1),
+        }, '下へ'),
+        h('button', { className: 'ghost', type: 'button', onClick: () => openPanel(task.id) }, '編集'),
+        h('button', { className: 'danger', type: 'button', onClick: () => deleteTask(task.id) }, '削除'),
+      ),
+    );
+  }
+
+  function TaskPanel({ task, closePanel, saveTask }) {
+    const [type, setType] = useState(task?.type ?? 'shopping');
+    const [title, setTitle] = useState(task?.title ?? '');
+    const [completed, setCompleted] = useState(task?.completed ?? false);
+    const isEdit = Boolean(task);
+
+    function submitTask(event) {
+      event.preventDefault();
+      const trimmedTitle = title.trim();
+      if (!trimmedTitle) return;
+      saveTask({
+        id: task?.id ?? null,
+        type,
+        title: trimmedTitle,
+        completed,
+      });
+    }
+
+    return h('div', { className: 'panel-backdrop', onClick: closePanel },
+      h('aside', {
+        className: 'task-panel',
+        'aria-modal': 'true',
+        role: 'dialog',
+        'aria-labelledby': 'panel-title',
+        onClick: (event) => event.stopPropagation(),
+      },
+        h('div', { className: 'panel-header' },
+          h('div', null,
+            h('p', { className: 'eyebrow' }, isEdit ? '編集' : '追加'),
+            h('h2', { id: 'panel-title' }, `タスク${isEdit ? '編集' : '追加'}パネル`),
+          ),
+          h('button', { className: 'icon-button', type: 'button', onClick: closePanel, 'aria-label': '閉じる' }, '×'),
+        ),
+        h('form', { className: 'task-form', onSubmit: submitTask },
+          h('label', null,
+            '種類',
+            h('select', { value: type, required: true, onChange: (event) => setType(event.target.value) },
+              h('option', { value: 'shopping' }, '買い物'),
+              h('option', { value: 'todo' }, 'やる事'),
+            ),
+          ),
+          h('label', null,
+            'タスク名',
+            h('input', {
+              type: 'text',
+              value: title,
+              maxLength: 80,
+              required: true,
+              placeholder: '例：牛乳を買う',
+              autoFocus: true,
+              onChange: (event) => setTitle(event.target.value),
+            }),
+          ),
+          h('label', null,
+            'ステータス',
+            h('select', { value: String(completed), required: true, onChange: (event) => setCompleted(event.target.value === 'true') },
+              h('option', { value: 'false' }, '未完了'),
+              h('option', { value: 'true' }, '完了'),
+            ),
+          ),
+          h('div', { className: 'form-actions' },
+            h('button', { type: 'button', className: 'ghost', onClick: closePanel }, 'キャンセル'),
+            h('button', { type: 'submit', className: 'primary' }, '保存'),
+          ),
+        ),
+      ),
+    );
+  }
+
+  function SettingsView({ tasks, theme, setTheme, exportTasks, importTasks, clearAllTasks }) {
+    return h('section', { className: 'page-card' },
+      h('div', { className: 'page-header' },
+        h('div', null,
+          h('p', { className: 'eyebrow' }, '設定'),
+          h('h2', null, 'データと表示'),
+        ),
+      ),
+      h('div', { className: 'settings-grid' },
+        h('section', { className: 'setting-card' },
+          h('h3', null, 'データ操作'),
+          h('div', { className: 'button-row' },
+            h('button', { className: 'primary', type: 'button', onClick: exportTasks }, 'エクスポート(JSON)'),
+            h('label', { className: 'file-button' },
+              'インポート(JSON)',
+              h('input', {
+                type: 'file',
+                accept: 'application/json',
+                onChange: (event) => importTasks(event.target.files?.[0]),
+              }),
+            ),
+            h('button', { className: 'danger', type: 'button', onClick: clearAllTasks }, '全データ削除'),
+          ),
+        ),
+        h('section', { className: 'setting-card' },
+          h('h3', null, 'テーマ切替'),
+          h('div', { className: 'segmented', role: 'group', 'aria-label': 'テーマ切替' },
+            h('button', {
+              className: theme === 'light' ? 'active' : '',
+              type: 'button',
+              onClick: () => setTheme('light'),
+            }, 'ライト'),
+            h('button', {
+              className: theme === 'dark' ? 'active' : '',
+              type: 'button',
+              onClick: () => setTheme('dark'),
+            }, 'ダーク'),
+          ),
+        ),
+        h('section', { className: 'setting-card' },
+          h('h3', null, 'ストレージ使用状況'),
+          h('p', { className: 'storage-size' }, formatBytes(getStorageBytes(tasks, theme))),
+          h('p', { className: 'muted' }, `対象: ${STORAGE_KEY}, ${THEME_KEY}`),
+        ),
+      ),
+    );
+  }
+}
 
 function loadTasks() {
   try {
@@ -42,359 +392,20 @@ function isTaskLike(task) {
     typeof task.updatedAt === 'string';
 }
 
-function saveTasks() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
-}
-
 function loadTheme() {
   const saved = localStorage.getItem(THEME_KEY);
   if (saved === 'light' || saved === 'dark') return saved;
   return 'light';
 }
 
-function saveTheme(theme) {
-  state.theme = theme;
-  localStorage.setItem(THEME_KEY, theme);
-  applyTheme(theme);
-  render();
-}
-
-function applyTheme(theme) {
-  document.documentElement.dataset.theme = theme;
-}
-
-function render() {
-  app.innerHTML = `
-    <div class="shell">
-      <aside class="sidebar" aria-label="メニュー">
-        <div>
-          <p class="eyebrow">taskick</p>
-          <h1>タスク管理</h1>
-          <p class="muted">localStorage に保存するシンプルな買い物・やる事リストです。</p>
-        </div>
-        <nav class="nav">
-          <button class="nav-button ${state.activeView === 'tasks' ? 'active' : ''}" data-view="tasks">タスク一覧</button>
-          <button class="nav-button ${state.activeView === 'settings' ? 'active' : ''}" data-view="settings">設定</button>
-        </nav>
-      </aside>
-      <main class="main">
-        ${state.activeView === 'tasks' ? renderTaskView() : renderSettingsView()}
-      </main>
-      ${state.panelOpen ? renderTaskPanel() : ''}
-    </div>
-  `;
-  bindEvents();
-}
-
-function renderTaskView() {
-  const incomplete = state.tasks.filter((task) => !task.completed);
-  const completed = state.tasks.filter((task) => task.completed);
-
-  return `
-    <section class="page-card">
-      <div class="page-header">
-        <div>
-          <p class="eyebrow">タスク一覧</p>
-          <h2>未完了 ${incomplete.length} 件 / 完了 ${completed.length} 件</h2>
-        </div>
-        <button class="primary" data-action="open-add">タスク追加</button>
-      </div>
-      <div class="deadline-grid" aria-label="期限別の状況">
-        ${renderDeadlineCard('今日', 0, '期限項目は未確認のため、現在は自動分類しません。')}
-        ${renderDeadlineCard('期限切れ', 0, '期限項目は未確認のため、現在は自動分類しません。')}
-        ${renderDeadlineCard('期限なし', state.tasks.length, '現在のデータ構造には期限がないため全タスクをここに扱います。')}
-      </div>
-      ${renderTaskSection('未完了タスク', incomplete, false)}
-      ${renderTaskSection('完了タスク', completed, true)}
-    </section>
-  `;
-}
-
-function renderDeadlineCard(label, count, note) {
-  return `
-    <div class="deadline-card">
-      <span>${label}</span>
-      <strong>${count}</strong>
-      <small>${note}</small>
-    </div>
-  `;
-}
-
-function renderTaskSection(title, tasks, completedSection) {
-  return `
-    <section class="task-section">
-      <div class="section-title">
-        <h3>${title}</h3>
-        <span>${tasks.length} 件</span>
-      </div>
-      ${tasks.length === 0 ? `<p class="empty">表示するタスクはありません。</p>` : `
-        <ul class="task-list">
-          ${tasks.map((task) => renderTaskItem(task, completedSection)).join('')}
-        </ul>
-      `}
-    </section>
-  `;
-}
-
-function renderTaskItem(task) {
-  const originalIndex = state.tasks.findIndex((item) => item.id === task.id);
-  return `
-    <li class="task-item" data-id="${escapeAttr(task.id)}">
-      <label class="check-label">
-        <input type="checkbox" ${task.completed ? 'checked' : ''} data-action="toggle" />
-        <span class="sr-only">完了 / 未完了切替</span>
-      </label>
-      <span class="type-badge">${typeLabels[task.type] ?? escapeHtml(task.type)}</span>
-      <span class="task-title ${task.completed ? 'done' : ''}">${escapeHtml(task.title)}</span>
-      <div class="task-actions">
-        <button class="ghost" data-action="move-up" ${originalIndex === 0 ? 'disabled' : ''}>上へ</button>
-        <button class="ghost" data-action="move-down" ${originalIndex === state.tasks.length - 1 ? 'disabled' : ''}>下へ</button>
-        <button class="ghost" data-action="edit">編集</button>
-        <button class="danger" data-action="delete">削除</button>
-      </div>
-    </li>
-  `;
-}
-
-function renderTaskPanel() {
-  const task = state.tasks.find((item) => item.id === state.editingId);
-  const isEdit = Boolean(task);
-  return `
-    <div class="panel-backdrop" data-action="close-panel">
-      <aside class="task-panel" aria-modal="true" role="dialog" aria-labelledby="panel-title" onclick="event.stopPropagation()">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">${isEdit ? '編集' : '追加'}</p>
-            <h2 id="panel-title">タスク${isEdit ? '編集' : '追加'}パネル</h2>
-          </div>
-          <button class="icon-button" data-action="close-panel" aria-label="閉じる">×</button>
-        </div>
-        <form id="task-form" class="task-form">
-          <label>
-            種類
-            <select name="type" required>
-              <option value="shopping" ${task?.type === 'shopping' ? 'selected' : ''}>買い物</option>
-              <option value="todo" ${task?.type === 'todo' ? 'selected' : ''}>やる事</option>
-            </select>
-          </label>
-          <label>
-            タスク名
-            <input name="title" type="text" value="${escapeAttr(task?.title ?? '')}" maxlength="80" required placeholder="例：牛乳を買う" />
-          </label>
-          <label>
-            ステータス
-            <select name="completed" required>
-              <option value="false" ${!task?.completed ? 'selected' : ''}>未完了</option>
-              <option value="true" ${task?.completed ? 'selected' : ''}>完了</option>
-            </select>
-          </label>
-          <div class="form-actions">
-            <button type="button" class="ghost" data-action="close-panel">キャンセル</button>
-            <button type="submit" class="primary">保存</button>
-          </div>
-        </form>
-      </aside>
-    </div>
-  `;
-}
-
-function renderSettingsView() {
-  return `
-    <section class="page-card">
-      <div class="page-header">
-        <div>
-          <p class="eyebrow">設定</p>
-          <h2>データと表示</h2>
-        </div>
-      </div>
-      <div class="settings-grid">
-        <section class="setting-card">
-          <h3>データ操作</h3>
-          <div class="button-row">
-            <button class="primary" data-action="export">エクスポート(JSON)</button>
-            <label class="file-button">
-              インポート(JSON)
-              <input type="file" accept="application/json" data-action="import" />
-            </label>
-            <button class="danger" data-action="clear-all">全データ削除</button>
-          </div>
-        </section>
-        <section class="setting-card">
-          <h3>テーマ切替</h3>
-          <div class="segmented" role="group" aria-label="テーマ切替">
-            <button class="${state.theme === 'light' ? 'active' : ''}" data-action="theme" data-theme="light">ライト</button>
-            <button class="${state.theme === 'dark' ? 'active' : ''}" data-action="theme" data-theme="dark">ダーク</button>
-          </div>
-        </section>
-        <section class="setting-card">
-          <h3>ストレージ使用状況</h3>
-          <p class="storage-size">${formatBytes(getStorageBytes())}</p>
-          <p class="muted">対象: ${STORAGE_KEY}, ${THEME_KEY}</p>
-        </section>
-      </div>
-    </section>
-  `;
-}
-
-function bindEvents() {
-  document.querySelectorAll('[data-view]').forEach((button) => {
-    button.addEventListener('click', () => {
-      state.activeView = button.dataset.view;
-      state.panelOpen = false;
-      render();
-    });
-  });
-
-  document.querySelectorAll('[data-action]').forEach((element) => {
-    element.addEventListener('click', handleActionClick);
-  });
-
-  document.querySelector('#task-form')?.addEventListener('submit', handleTaskSubmit);
-  document.querySelector('input[data-action="import"]')?.addEventListener('change', handleImport);
-}
-
-function handleActionClick(event) {
-  const action = event.currentTarget.dataset.action;
-  const item = event.currentTarget.closest('.task-item');
-  const id = item?.dataset.id;
-
-  if (action === 'open-add') openPanel();
-  if (action === 'close-panel') closePanel();
-  if (action === 'toggle' && id) toggleTask(id);
-  if (action === 'edit' && id) openPanel(id);
-  if (action === 'delete' && id) deleteTask(id);
-  if (action === 'move-up' && id) moveTask(id, -1);
-  if (action === 'move-down' && id) moveTask(id, 1);
-  if (action === 'export') exportTasks();
-  if (action === 'clear-all') clearAllTasks();
-  if (action === 'theme') saveTheme(event.currentTarget.dataset.theme);
-}
-
-function openPanel(id = null) {
-  state.editingId = id;
-  state.panelOpen = true;
-  render();
-  document.querySelector('input[name="title"]')?.focus();
-}
-
-function closePanel() {
-  state.panelOpen = false;
-  state.editingId = null;
-  render();
-}
-
-function handleTaskSubmit(event) {
-  event.preventDefault();
-  const formData = new FormData(event.currentTarget);
-  const now = new Date().toISOString();
-  const title = String(formData.get('title') ?? '').trim();
-  if (!title) return;
-
-  const existing = state.tasks.find((task) => task.id === state.editingId);
-  if (existing) {
-    existing.type = String(formData.get('type'));
-    existing.title = title;
-    existing.completed = String(formData.get('completed')) === 'true';
-    existing.updatedAt = now;
-  } else {
-    state.tasks.unshift({
-      id: crypto.randomUUID(),
-      type: String(formData.get('type')),
-      title,
-      completed: String(formData.get('completed')) === 'true',
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-
-  saveTasks();
-  closePanel();
-}
-
-function toggleTask(id) {
-  const task = state.tasks.find((item) => item.id === id);
-  if (!task) return;
-  task.completed = !task.completed;
-  task.updatedAt = new Date().toISOString();
-  saveTasks();
-  render();
-}
-
-function deleteTask(id) {
-  const task = state.tasks.find((item) => item.id === id);
-  if (!task) return;
-  if (!confirm(`「${task.title}」を削除しますか？`)) return;
-  state.tasks = state.tasks.filter((item) => item.id !== id);
-  saveTasks();
-  render();
-}
-
-function moveTask(id, direction) {
-  const index = state.tasks.findIndex((item) => item.id === id);
-  const nextIndex = index + direction;
-  if (index < 0 || nextIndex < 0 || nextIndex >= state.tasks.length) return;
-  const [task] = state.tasks.splice(index, 1);
-  state.tasks.splice(nextIndex, 0, task);
-  saveTasks();
-  render();
-}
-
-function exportTasks() {
-  const payload = JSON.stringify(state.tasks, null, 2);
-  const blob = new Blob([payload], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `taskick-${new Date().toISOString().slice(0, 10)}.json`;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-async function handleImport(event) {
-  const file = event.currentTarget.files?.[0];
-  if (!file) return;
-  try {
-    const imported = JSON.parse(await file.text());
-    if (!Array.isArray(imported) || !imported.every(isTaskLike)) {
-      alert('インポートできるJSON形式ではありません。');
-      return;
-    }
-    state.tasks = imported;
-    saveTasks();
-    render();
-  } catch {
-    alert('JSONの読み込みに失敗しました。');
-  }
-}
-
-function clearAllTasks() {
-  if (!confirm('全データを削除しますか？')) return;
-  state.tasks = [];
-  saveTasks();
-  render();
-}
-
-function getStorageBytes() {
+function getStorageBytes(tasks, theme) {
   return new Blob([
-    localStorage.getItem(STORAGE_KEY) ?? '',
-    localStorage.getItem(THEME_KEY) ?? '',
+    JSON.stringify(tasks),
+    theme,
   ]).size;
 }
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   return `${(bytes / 1024).toFixed(1)} KB`;
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
-
-function escapeAttr(value) {
-  return escapeHtml(value);
 }
