@@ -40,9 +40,6 @@ type Task = {
 
 ## 起動方法
 
-ブラウザで直接 `index.html` を開く場合も動作します。
-HTTP サーバーで確認する場合は以下を実行してください。
-
 ```bash
 npm install
 npm run start
