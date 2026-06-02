@@ -40,6 +40,10 @@ type Task = {
 
 ## 起動方法
 
+ブラウザで直接 `index.html` を開く場合も動作します。
+このアプリは import/export を使わない通常の JavaScript として読み込むため、`file://` で開いた場合でも ES Modules の CORS 制約を受けません。
+HTTP サーバーで確認する場合は以下を実行してください。
+
 ```bash
 npm install
 npm run start
